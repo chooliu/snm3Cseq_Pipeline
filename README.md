@@ -12,19 +12,19 @@
 * For the **methylome**, the primary features are the methylation counts and coverage for each cytosine in the genome (**.allc** file), which can then be aggregated into methylation levels of different genomic intervals (e.g., 100kb-bins, genes; **.mcds** file).
 * For **chromatin conformation**, the features are read-level contacts (similar to **.pairs**) which can also be aggregated into counts in different pairs of bins (10kb, 25kb, 100kb aggregated counts in sparse contact matrices _a la_ **.cool** files).   
 
+**(Note: Pipeline under development for user accessibility/reproducibility, as well as compatibility with newer 3C/HiC tools.)**
+
 **What isn't this repo?**
 
 * Cell-level QC steps, which can be celltype- and study-specific. (Some suggestions on the [Detailed Overview](./Documentation/detailed_overview.md) page and within [past manuscripts](#technology-references).)
 * Downstream analysis of mC and 3C following basic quantification (e.g., feature selection/calling, clustering, hypothesis testing, imputation). See [allcools](https://lhqing.github.io/ALLCools/) and [scHiCluster](https://github.com/zhoujt1994/scHiCluster).
 
-### Related Pipelines
+### Related Pipelines 
 
-This repo is under development for user accessibility/reproducibility, as well as compatibility with newer 3C/HiC tools.
+Existing quantification pipelines, mainly from our collaborators at/formerly at the Salk Institute:
 
-Existing quantification pipelines:
-
-* [TAURUS-MH](https://github.com/dixonlab/Taurus-MH): read-splitting based mapping pipeline historically used sn-m3C-seq &arr; developed specifically for this assay primarily by Dr. Dongsung Lee (Salk Institute, now .
-* [YAP (Yet Another Pipeline)](https://hq-1.gitbook.io/mc/): supports sn-m3C-seq and additional related assays (e.g., mC, mCT, mCAT-seq), including new protocol based on restriction-site splitting for m3C. Snakemake. Developed primarily by the Ecker Lab/Dr. Hanqing Liu (Salk Institute).
+* [TAURUS-MH](https://github.com/dixonlab/Taurus-MH): read-splitting based mapping pipeline historically used on sn-m3C-seq &arr; developed specifically for this assay primarily by Dr. Dongsung Lee.
+* [YAP (Yet Another Pipeline)](https://hq-1.gitbook.io/mc/): supports sn-m3C-seq and additional related assays (e.g., mC, mCT, mCAT-seq), including new protocol based on restriction-site splitting for m3C. Snakemake. Developed primarily by the Ecker Lab/Dr. Hanqing Liu.
 
 Downstream analysis tools:
 
@@ -44,4 +44,5 @@ Additional examples of applications/publications using sn-m3C-seq:
 
 ### Example Datasets
 
-* Some raw and processed datasets are linked on our lab website (luogenomics.github.io)[https://luogenomics.github.io/technologies/] & publicly available.
+* Detailed documentation/pipeline with reproducible application to example data forthcoming.
+* Some raw and processed datasets are linked/publicly available via our lab website [luogenomics.github.io](https://luogenomics.github.io/data/). For example, note the `_allc.tar.gz`  (cytosine-level) and `_contacts.tar.gz` (contact pairs) files for [GEO GSM6596812](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSM6596812). 
