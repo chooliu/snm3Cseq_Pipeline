@@ -1,0 +1,54 @@
+
+#!/bin/bash
+#$ -cwd
+#$ -o sublogs/A00b_genome_prep_bismark.$JOB_ID
+#$ -j y
+#$ -N A00b_prep_bismark
+#$ -l h_rt=24:00:00,h_data=8G
+#$ -pe shared 4
+#$ -hold_jid A00a_genome_dl_index
+
+
+
+echo "Job $JOB_ID started on:   " `hostname -s`
+echo "Job $JOB_ID started on:   " `date `
+echo " "
+
+
+
+
+
+# environment init -----------------------------------------------------------
+
+. /u/local/Modules/default/init/modules.sh # <--
+module load anaconda3 # <--
+conda activate snm3Cseq_taurus # <--
+
+export $(cat snm3C_parameters.env | grep -v '^#' | xargs) # <--
+
+
+
+# bismark index -----------------------------------------------------------------
+
+# if using TAURUS version of m3C pipeline ("snm3Cseq_taurus")
+# use bowtie1 to index the genome
+
+mkdir ${ref_dir}/bowtie1
+cd ${ref_dir}/bowtie1
+
+ln -s ${ref_fasta} input.fa
+
+if [[ ! -s Bisulfite_Genome ]]
+then
+    bismark_genome_preparation $PWD --bowtie1
+fi
+
+
+
+
+
+echo -e "\n\n'A00b_genome_prep_bismark' completed.\n\n"
+
+
+echo "Job $JOB_ID ended on:   " `hostname -s`
+echo "Job $JOB_ID ended on:   " `date `

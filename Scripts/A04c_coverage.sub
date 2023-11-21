@@ -1,0 +1,133 @@
+
+#!/bin/bash
+#$ -cwd
+#$ -o sublogs/A04c_coverage.$JOB_ID.$TASK_ID
+#$ -j y
+#$ -l h_rt=6:00:00,h_data=16G
+#$ -N A04c_coverage
+#$ -t 1-512
+#$ -hold_jid_ad A04a_bismark
+
+
+
+echo "Job $JOB_ID.$SGE_TASK_ID started on:   " `hostname -s`
+echo "Job $JOB_ID.$SGE_TASK_ID started on:   " `date `
+echo " "
+
+
+
+
+
+# environment init -------------------------------------------------------------
+
+. /u/local/Modules/default/init/modules.sh # <--
+module load anaconda3 # <--
+conda activate snm3Cseq_taurus # <--
+
+export $(cat snm3C_parameters.env | grep -v '^#' | xargs) # <--
+
+skip_complete=true # <-- for help with incomplete jobs
+
+
+
+
+# extract target filepaths -----------------------------------------------------
+
+# helper functions
+query_metadat () {
+  awk -F',' -v targetcol="$1" \
+      'NR==1 {
+                for (i=1;i<=NF;i++) {
+                    if ($i==targetcol) {assayout=i; break} }
+                print $assayout
+              }
+      NR>1 {
+                print $assayout
+            }' $metadat_well
+}
+
+# extract target wells, print values for log
+
+batchnum=($(query_metadat "batchnum"))
+nwells=${#batchnum[@]}
+
+target_well_rows=()
+for ((row=1; row<=nwells; row++))
+do
+    if [[ "${batchnum[$row]}" == "$SGE_TASK_ID" ]]
+    then
+        target_well_rows+=($row)
+    fi
+done
+
+
+
+# filepaths associated with target rows in well-level metadata -----------------
+
+wellprefix=($(query_metadat "wellprefix"))
+dir_well=($(query_metadat "A04a_dir_bismark"))
+
+final_bam=($(query_metadat "A04a_bam_final"))
+
+outsamstats=($(query_metadat "A04c_txt_samstats")) # 'samstats.txt' by default
+outcovstats=($(query_metadat "A04c_txt_covnsites")) # 'nbases_cov_by_chr.txt'
+outcovtot=($(query_metadat "A04c_txt_covtot")) # 'total_cov_by_chr.txt'
+
+
+
+# samtools stats on each well in the batch -------------------------------------
+
+for row in ${target_well_rows[@]} 
+do
+
+    cd ${dir_proj}
+    
+    if [[ -s ${dir_proj}/${outsamstats[$row]} \
+        && -s ${dir_proj}/${outcovstats[$row]} \
+        && -s ${dir_proj}/${outcovtot[$row]} ]]
+    then
+        echo -e "coverage output for '${wellprefix[$row]}' already exists."
+                
+        if [[ "${skip_complete}" == "true" ]]
+        then
+            echo "skip_complete == true. skipping this well.'"
+            continue
+        else
+            echo "skip_complete != true. re-running this well.'"
+        fi
+    fi
+    
+    if [[ ! -s ${dir_proj}/${final_bam[$row]} ]]
+    then
+        echo -e "input .bam for '${wellprefix[$row]}' seems to be missing. skipping.\n\n"
+    fi
+
+    echo -e "\n\nprofiling .bams from '${wellprefix[$row]}'...\n\n"
+
+    cd ${dir_well[$row]}
+
+    # run samtools stats
+    samtools stats ${dir_proj}/${final_bam[$row]} | grep '^SN' | cut -f 2,3 > ${dir_proj}/${outsamstats[$row]}
+
+    # use samtools mpileup for total coverage
+    samtools mpileup ${dir_proj}/${final_bam[$row]} | cut -f 1,4 > tmp_coverage_mpileup
+
+    # aggregate by chromosome
+    # (useful for sex-checks)
+    cut -f 1 tmp_coverage_mpileup | uniq -c > ${dir_proj}/${outcovstats[$row]}
+    awk '{covsums[$1]+=$2} END {for (key in covsums) printf("%s\t%s\n", key, covsums[key])}' \
+        tmp_coverage_mpileup > ${dir_proj}/${outcovtot[$row]}
+    rm tmp_coverage_mpileup
+
+done
+
+
+
+echo -e "\n\n'A04c_coverage' completed.\n\n"
+
+
+
+
+
+echo "Job $JOB_ID.$SGE_TASK_ID ended on:   " `hostname -s`
+echo "Job $JOB_ID.$SGE_TASK_ID ended on:   " `date `

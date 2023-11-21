@@ -1,0 +1,133 @@
+
+#!/bin/bash
+#$ -cwd
+#$ -o sublogs/A06a_quant_contacts.$JOB_ID.$TASK_ID
+#$ -j y
+#$ -l h_rt=2:00:00,h_data=24G
+#$ -N A06a_quant_contacts
+#$ -t 1-512
+#$ -hold_jid_ad A04a_bismark
+
+
+
+echo "Job $JOB_ID.$SGE_TASK_ID started on:   " `hostname -s`
+echo "Job $JOB_ID.$SGE_TASK_ID started on:   " `date `
+echo " "
+
+
+
+
+
+# environment init -------------------------------------------------------------
+
+. /u/local/Modules/default/init/modules.sh # <--
+module load anaconda3 # <--
+conda activate snm3Cseq_taurus # <--
+
+export $(cat snm3C_parameters.env | grep -v '^#' | xargs) # <--
+
+skip_complete=true # <-- for help with incomplete jobs
+
+
+
+# extract target filepaths -----------------------------------------------------
+
+# helper functions
+query_metadat () {
+  awk -F',' -v targetcol="$1" \
+      'NR==1 {
+                for (i=1;i<=NF;i++) {
+                    if ($i==targetcol) {assayout=i; break} }
+                print $assayout
+              }
+      NR>1 {
+                print $assayout
+            }' $metadat_well
+}
+
+# extract target wells, print values for log
+
+batchnum=($(query_metadat "batchnum"))
+nwells=${#batchnum[@]}
+
+target_well_rows=()
+for ((row=1; row<=nwells; row++))
+do
+    if [[ "${batchnum[$row]}" == "$SGE_TASK_ID" ]]
+    then
+        target_well_rows+=($row)
+    fi
+done
+
+
+
+# filepaths associated with target rows in well-level metadata -----------------
+
+wellprefix=($(query_metadat "wellprefix"))
+dir_well=($(query_metadat "A04a_dir_bismark"))
+
+bam_in=($(query_metadat "A04a_bam_final"))
+
+file_pairs=($(query_metadat "A06a_pairs"))
+file_meta3c=($(query_metadat "A06a_3c_metadat"))
+
+
+
+# print target files -----------------------------------------------------------
+
+echo "batch number: $SGE_TASK_ID"
+echo "processing the following rows in well metadata file ($metadat_well):"
+for row in ${target_well_rows[@]}
+    do
+        echo -e "$row\t${wellprefix[$row]}"
+    done
+echo -e "\n\n"
+
+
+
+# contact-quant & metadat collection on each well in the batch -----------------
+
+for row in ${target_well_rows[@]} 
+do
+
+    cd ${dir_proj}
+    
+    if [[ -s ${file_pairs[$row]} \
+        && -s ${file_meta3c[$row]} ]]
+    then
+        echo -e "pairs & metadat for '${wellprefix[$row]}' already exist."
+        
+        if [[ "${skip_complete}" == "true" ]]
+        then
+            echo "skip_complete == true. skipping this well.'"
+            continue
+        else
+            echo "skip_complete != true. re-running this well.'"
+        fi
+    fi
+
+    if [[ ! -s ${dir_proj}/${bam_in[$row]} ]]
+    then
+        echo "input .bam file missing for '${wellprefix[$row]}'? skipping this well."
+        continue
+    fi
+    
+    echo -e "\n\nprofiling contacts for '${wellprefix[$row]}'...\n\n"
+    cd ${dir_well[$row]}
+    
+    # generates pairs.tsv and metadat_pairs.tsv
+    # 1-2 min / well --> <1 hr per batch expected
+    python ${dir_proj}/Scripts/A06a_quantify_contacts_TAURUS.py "${dir_proj}/${bam_in[$row]}"
+
+done
+
+
+
+echo -e "\n\n'A06a_quant_contacts' completed.\n\n"
+
+
+
+
+
+echo "Job $JOB_ID.$SGE_TASK_ID ended on:   " `hostname -s`
+echo "Job $JOB_ID.$SGE_TASK_ID ended on:   " `date `

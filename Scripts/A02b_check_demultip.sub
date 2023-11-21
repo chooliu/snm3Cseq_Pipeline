@@ -1,0 +1,164 @@
+
+#!/bin/bash
+#$ -cwd
+#$ -o sublogs/A02b_check_demult.$JOB_ID
+#$ -j y
+#$ -l h_rt=1:00:00,h_data=4G
+#$ -N A02b_check_demult
+#$ -hold_jid A02a_demultip
+
+
+
+echo "Job $JOB_ID started on:   " `hostname -s`
+echo "Job $JOB_ID started on:   " `date `
+echo " "
+
+
+
+
+
+# environment init -------------------------------------------------------------
+
+. /u/local/Modules/default/init/modules.sh # <--
+module load anaconda3 # <--
+conda activate snm3Cseq_taurus # <--
+
+export $(cat snm3C_parameters.env | grep -v '^#' | xargs) # <--
+
+
+
+# extract target filepaths------------------------------------------------------
+
+query_metadat () {
+  awk -F',' -v targetcol="$1" \
+      'NR==1 {
+                for (i=1;i<=NF;i++) {
+                    if ($i==targetcol) {assayout=i; break} }
+                print $assayout
+              } 
+      NR>1 {
+                print $assayout
+            }' ${metadat_well}
+}
+
+check_filepaths_in_assay() {
+    for file in $@
+        do 
+        if [[ ! -s ${file} ]]
+            then
+                echo "missing '${file}'"
+            fi
+        done
+}
+
+r1demultip=($(query_metadat "A02a_fqgz_demultip_R1"))
+r2demultip=($(query_metadat "A02a_fqgz_demultip_R2"))
+
+
+
+# apply checks for A01a output -------------------------------------------------
+# (may be later depreciated due to explicit target filename change)
+
+
+
+echo -e "\n\n-----------------------------------------------------------------"
+echo "A. checking expected output from well-level metadata file (A01c)..."
+echo "-----------------------------------------------------------------\n\n"
+
+echo "* checks the A02a output columns of 'metadat_well' if the file exists and is non-empty."
+echo "* if none missing, will only output target column names above."
+echo "* if some declared 'missing' but all other checks OK, cell barcode may not exist."
+echo "  (check 'fastq_demultip/plate_summary.txt report)"
+
+echo -e "\nchecking Read 1 .fastq.gz files:\n"
+check_filepaths_in_assay ${r1demultip[@]}
+
+echo -e "\nchecking Read 2 .fastq.gz files:\n"
+check_filepaths_in_assay ${r2demultip[@]}
+
+
+echo -e "\n\n-----------------------------------------------------------------"
+echo "B. tabulating number of empty wells detected by perl script per plate... "
+echo -e "-----------------------------------------------------------------\n\n"
+
+echo "* # missing wells, based on # demultiplexing indices undetected in perl script."
+echo "* should be consistent with [A], with same number of wells as detected cell barcodes."
+
+grep "rm fastq" -c sublogs/A02a*
+
+
+
+echo -e "\n\n-----------------------------------------------------------------"
+echo "C. checking log files for completion."
+echo -e "-----------------------------------------------------------------\n\n"
+
+echo "checking if ending timestamp in sublogs/A02a_demultiplex* output."
+echo "if any filename is printed, the associated batch may have not completed trimming."
+
+grep -c 'ended on' sublogs/A02a_demultiplex* | awk -F ":" '$2==0 {print $1}'
+
+
+
+echo -e "\n\n-----------------------------------------------------------------"
+echo "D. checking that two summary .txt files were generated for each file... "
+echo -e "-----------------------------------------------------------------\n\n"
+
+summary_txt_missing=0
+for prefix in $(cut -f 2 -d ',' $metadat_plate | tail -n +2);
+    do
+        if [[ $(find "fastq_demultip/" -maxdepth 1 -name "${prefix}*.txt" | wc -l) != 2 ]]
+            then 
+            let "summary_txt_missing+=1"
+            echo "summary files missing for : ${prefix}"
+        fi
+    done
+
+echo "* ${summary_txt_missing} 'raw_fastq' files are missing their summary .txt file(s)."
+echo "* if any summaries are missing, the demultiplexing jobs may have failed (historically, memory issues)"
+
+
+
+echo -e "\n\n-----------------------------------------------------------------"
+echo "E. printing counts & barcodes corrected (with 1bp mismatch)..."
+echo -e "-----------------------------------------------------------------\n\n"
+
+for prefix in $(cut -f 2 -d ',' $metadat_plate | tail -n +2);
+do
+    echo $prefix
+    for summaryfile in fastq_demultip/${prefix}*summary*.txt
+    do
+        awk 'NR<=2' $summaryfile | cut -f 4
+    done
+done
+
+
+
+echo -e "\n\n-----------------------------------------------------------------"
+echo "F. printing percent barcodes unassigned..."
+echo -e "-----------------------------------------------------------------\n\n"
+
+echo "* unassigned reads should be ~50%, assuming two barcode ref files (summary_1.txt, summary_2.txt)"
+echo "  caveat: sum generally >100% b/c of unassigned reads 'double counted' to both barcode lists."
+echo "* total unassigned expected 1-3%, usually due to ambig bases (N) or sequencing errors;"
+echo "  higher rates suggestive of contaminating library, issues in lane merging (fastq_raw input)"
+
+for prefix in $(cut -f 2 -d ',' $metadat_plate | tail -n +2);
+do
+    echo $prefix
+    for summaryfile in fastq_demultip/${prefix}*summary*.txt
+    do
+        tail -n 1 $summaryfile
+    done
+done
+
+
+
+
+echo -e "\n\n'A02b_check_demultip' completed.\n\n"
+
+
+
+echo "Job $JOB_ID ended on:   " `hostname -s`
+echo "Job $JOB_ID ended on:   " `date `
+
+

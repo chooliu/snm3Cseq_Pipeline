@@ -1,0 +1,43 @@
+
+#!/bin/bash
+#$ -cwd
+#$ -o sublogs/A07b_compile_metadata.$JOB_ID
+#$ -j y
+#$ -N A07b_compile_metadata
+#$ -l h_rt=0:30:00,h_data=4G
+#$ -hold_jid A07a_parse_metadata
+
+
+
+echo "Job $JOB_ID started on:   " `hostname -s`
+echo "Job $JOB_ID started on:   " `date `
+echo " "
+
+
+
+
+
+# environment init -----------------------------------------------------------
+
+. /u/local/Modules/default/init/modules.sh # <--
+module load anaconda3 # <--
+conda activate snm3Cseq_taurus # <--
+
+export $(cat snm3C_parameters.env | grep -v '^#' | xargs) # <--
+
+
+
+# run metadat scripts --------------------------------------------------------
+
+python Scripts/A07b_compile_metadata.py
+
+
+
+
+
+echo -e "\n\n'A07b_compile_metadata' completed.\n\n"
+
+
+
+echo "Job $JOB_ID ended on:   " `hostname -s`
+echo "Job $JOB_ID ended on:   " `date `

@@ -1,0 +1,143 @@
+
+#!/bin/bash
+#$ -cwd
+#$ -o sublogs/A05a_bam2allc.$JOB_ID.$TASK_ID
+#$ -j y
+#$ -l h_rt=4:00:00,h_data=24G
+#$ -N A05a_bam2allc
+#$ -t 1-512
+#$ -hold_jid_ad A04c_coverage
+
+
+
+echo "Job $JOB_ID.$SGE_TASK_ID started on:   " `hostname -s`
+echo "Job $JOB_ID.$SGE_TASK_ID started on:   " `date `
+echo " "
+
+
+
+
+
+# environment init -------------------------------------------------------------
+
+. /u/local/Modules/default/init/modules.sh # <--
+module load anaconda3 # <--
+conda activate snm3Cseq_taurus # <--
+
+export $(cat snm3C_parameters.env | grep -v '^#' | xargs) # <--
+
+skip_complete=true # <-- for help with incomplete jobs
+overwrite_partial=true # <-- for help with incomplete jobs
+
+
+
+# extract target filepaths -----------------------------------------------------
+
+# helper functions
+query_metadat () {
+  awk -F',' -v targetcol="$1" \
+      'NR==1 {
+                for (i=1;i<=NF;i++) {
+                    if ($i==targetcol) {assayout=i; break} }
+                print $assayout
+              }
+      NR>1 {
+                print $assayout
+            }' $metadat_well
+}
+
+# extract target wells, print values for log
+batchnum=($(query_metadat "batchnum"))
+nwells=${#batchnum[@]}
+
+target_well_rows=()
+for ((row=1; row<=nwells; row++))
+do
+    if [[ "${batchnum[$row]}" == "$SGE_TASK_ID" ]]
+    then
+        target_well_rows+=($row)
+    fi
+done
+
+
+
+# filepaths associated with target rows in well-level metadata -----------------
+# (generally not customizeable because output names set by bismark)
+
+wellprefix=($(query_metadat "wellprefix"))
+dir_well=($(query_metadat "A04a_dir_bismark"))
+
+bam_in=($(query_metadat "A04a_bam_final"))
+
+# allc.tsv.gz by default
+allc_out=($(query_metadat "A05a_allc"))
+allctbi_out=($(query_metadat "A05a_allctbi"))
+
+
+
+# print target files -----------------------------------------------------------
+
+echo "batch number: $SGE_TASK_ID"
+echo "processing the following rows in well metadata file ($metadat_well):"
+for row in ${target_well_rows[@]}
+    do
+        echo -e "$row\t${wellprefix[$row]}"
+    done
+echo -e "\n\n"
+
+for row in ${target_well_rows[@]} 
+do
+
+    # check for existing mapping output
+    # if final outputs exist, skip; else run mapping .bam
+    cd $dir_proj
+    
+    if [[ -s ${allc_out[$row]} \
+        && -s ${allctbi_out[$row]} ]]
+    then
+        if [ $(wc -c < ${allc_out[$row]}) -le 50 ];
+        then echo ".allc exists, but seems to be empty. re-running '${wellprefix[$row]}'."
+        else
+            echo -e "final .allc for '${wellprefix[$row]}' already exists."
+            if [[ "${skip_complete}" == "true" ]]
+            then
+                echo "skip_complete == true. skipping this well.'"
+                continue
+            else
+                echo "skip_complete != true. re-running this well.'"
+            fi
+        fi
+    fi
+    
+    if [[ ! -e ${bam_in[$row]} ]]
+    then
+        echo -e "\n\n.bam for '${wellprefix[$row]}' missing. skipping this well."
+        continue
+    fi
+
+    # .bam --> .allc (generally 3-5min)
+    echo -e "\n\ncoverting .bam to .allc for '${wellprefix[$row]}'...\n\n"
+    cd ${dir_proj}/${dir_well[$row]}
+
+    if [ $(ls allc.tsv.gz.temp.* | wc -l) > 0 ]
+    then
+        echo "some intermediate .allc files found in directory; removing."
+        rm allc.tsv.gz.temp.*
+    fi
+    
+    allcools bam-to-allc -bam ${dir_proj}/${bam_in[$row]} \
+         --reference_fasta $ref_fasta --output_path ${dir_proj}/${allc_out[$row]} \
+         --convert_bam_strandness --cpu 1
+
+done
+
+
+
+
+
+echo -e "\n\n'A05a_bam2allc' completed.\n\n"
+
+
+
+echo "Job $JOB_ID.$SGE_TASK_ID ended on:   " `hostname -s`
+echo "Job $JOB_ID.$SGE_TASK_ID ended on:   " `date `

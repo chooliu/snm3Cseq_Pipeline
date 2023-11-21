@@ -1,0 +1,88 @@
+
+#!/bin/bash
+#$ -cwd
+#$ -o sublogs/A07a_parse_metadata.$JOB_ID.$TASK_ID
+#$ -j y
+#$ -l h_rt=2:00:00,h_data=8G
+#$ -N A07a_parse_metadata
+#$ -t 1-7
+
+
+
+echo "Job $JOB_ID.$SGE_TASK_ID started on:   " `hostname -s`
+echo "Job $JOB_ID.$SGE_TASK_ID started on:   " `date `
+echo " "
+
+
+
+
+
+# environment init -------------------------------------------------------------
+
+. /u/local/Modules/default/init/modules.sh # <--
+module load anaconda3 # <--
+conda activate snm3Cseq_taurus # <--
+
+export $(cat snm3C_parameters.env | grep -v '^#' | xargs) # <--
+
+
+
+# run each helper script (A07a*) ------------------------------------------------
+
+# note: in practice these can each be submitted interactively/as its own task,
+# as some of these scripts should be much lower resource than others
+# however, this -t 1-7 job parallelization is just for tidyness
+
+echo "metadata script # $SGE_TASK_ID running:"
+
+case $SGE_TASK_ID in
+
+  1)
+    echo "python Scripts/A07a1_trimming.py"
+    python Scripts/A07a1_trimming.py
+    ;;
+
+  2)
+    echo "python Scripts/A07a2_mapping_rate.py"
+    python Scripts/A07a2_mapping_rate.py
+    ;;
+
+  3)
+    echo "python Scripts/A07a3_dedupe.py"
+    python Scripts/A07a3_dedupe.py
+    ;;
+
+  4)
+    echo "python Scripts/A07a4_global_mC_fracs.py"
+    python Scripts/A07a4_global_mC_fracs.py
+    ;;
+
+  5)
+    echo "python Scripts/A07a5_samtools_stats.py"
+    python Scripts/A07a5_samtools_stats.py
+    ;;
+
+  6)
+    echo "python Scripts/A07a6_coverage.py"
+    python Scripts/A07a6_coverage.py
+    ;;
+
+  7)
+    echo "python Scripts/A07a7_contacts.py"
+    python Scripts/A07a7_contacts.py
+    ;;
+    
+  *)
+    ;;
+esac
+
+
+
+
+
+echo "completed 'A07a_parse_metadata.'"
+
+
+
+echo "Job $JOB_ID.$SGE_TASK_ID ended on:   " `hostname -s`
+echo "Job $JOB_ID.$SGE_TASK_ID ended on:   " `date `

@@ -1,0 +1,248 @@
+
+#!/bin/bash
+#$ -cwd
+#$ -o sublogs/A04a_bismark.$JOB_ID.$TASK_ID
+#$ -j y
+#$ -l h_rt=12:00:00,h_data=8G
+#$ -pe shared 4
+#$ -N A04a_bismark
+#$ -t 1-512
+#$ -hold_jid_ad A03a_trim
+
+
+
+echo "Job $JOB_ID.$SGE_TASK_ID started on:   " `hostname -s`
+echo "Job $JOB_ID.$SGE_TASK_ID started on:   " `date `
+echo " "
+
+
+
+
+
+# environment init -------------------------------------------------------------
+
+. /u/local/Modules/default/init/modules.sh # <--
+module load anaconda3 # <--
+conda activate snm3Cseq_taurus # <--
+
+export $(cat snm3C_parameters.env | grep -v '^#' | xargs) # <--
+
+skip_complete=true # <-- for help with incomplete jobs
+overwrite_partial=true # <-- for help with incomplete jobs
+
+# note: estimated time is ~20 min/well so h_rt=24:00:00 may be excessive (anticipate ~8hr)
+# alternatives are to use less time & resubmit if incomplete or change # wells/batch in A01c
+
+
+
+# extract target filepaths -----------------------------------------------------
+
+# helper functions
+query_metadat () {
+  awk -F',' -v targetcol="$1" \
+      'NR==1 {
+                for (i=1;i<=NF;i++) {
+                    if ($i==targetcol) {assayout=i; break} }
+                print $assayout
+              }
+      NR>1 {
+                print $assayout
+            }' ${metadat_well}
+}
+
+# extract target wells, print values for log
+batchnum=($(query_metadat "batchnum"))
+nwells=${#batchnum[@]}
+
+target_well_rows=()
+for ((row=1; row<=nwells; row++))
+do
+    if [[ "${batchnum[$row]}" == "$SGE_TASK_ID" ]]
+    then
+        target_well_rows+=($row)
+    fi
+done
+
+
+
+# filepaths associated with target rows in well-level metadata -----------------
+# (generally not customizeable because output names set by bismark)
+
+if [[ ! -s mapping_bismark ]]
+then
+    mkdir mapping_bismark
+fi
+
+wellprefix=($(query_metadat "wellprefix"))
+dir_well=($(query_metadat "A04a_dir_bismark"))
+
+# trimmed .fastqs for input to mapping
+fastq_r1p=($(query_metadat "A03a_fqgz_paired_R1"))
+fastq_r2p=($(query_metadat "A03a_fqgz_paired_R2"))
+fastq_r1singletrim=($(query_metadat "A03a_fqgz_singletrim_R1"))
+fastq_r2singletrim=($(query_metadat "A03a_fqgz_singletrim_R2"))
+
+# TAURUS-related files
+r1unmap=r1unmap.fq.gz
+r2unmap=r2unmap.fq.gz
+
+# final files to check
+log_picard=($(query_metadat "A04a_log_picard"))
+log_R2P3=($(query_metadat "A04a_bismarktxt_R2p3"))
+bam_final=($(query_metadat "A04a_bam_final"))
+
+
+
+# print target files -----------------------------------------------------------
+
+echo "batch number: $SGE_TASK_ID"
+echo "processing the following rows in well metadata file ($metadat_well):"
+for row in ${target_well_rows[@]}
+    do
+        echo -e "$row\t${wellprefix[$row]}"
+    done
+echo -e "\n\n"
+
+
+# for each well in batch, apply mC map & quant
+# (could add check here to skip rows where no trimming output,
+# but since done by well doesn't cause catastrophic problems)
+for row in ${target_well_rows[@]} 
+do
+
+    # check for existing mapping output
+    # if final outputs exist, skip; else run mapping .bam
+    cd $dir_proj
+    
+    if [[ -s ${log_R2P3[$row]} \
+        && -s ${log_picard[$row]} \
+        && -s ${bam_final[$row]} \
+        && "$skip_complete"=="true" ]]
+    then
+        echo -e "final alignments for '${wellprefix[$row]}' already exist. skipping this well.'"
+    else
+    
+        echo -e "\n\napplying bismark to '${wellprefix[$row]}'...\n\n"
+
+        # remove old directory if one exists to deal with incomplete files
+        # albeit the only major issues are .bai and .tbi indices 
+        # (these often are not overwritten by software in the pipeline,
+        # resulting in "index is older than file" errors later on)
+        if [[ -e mapping_bismark/${wellprefix[$row]} && "$overwrite_partial" == "true" ]]
+        then
+            echo -e "\n\nWARNING: folder for '${wellprefix[$row]}' exists, but not its final allc files."
+            echo "because overwrite_partial=true, deleting the directory and re-mapping."
+            rm -rf mapping_bismark/${wellprefix[$row]}
+        fi
+        
+        mkdir $dir_proj/${dir_well[$row]}
+        cd $dir_proj/${dir_well[$row]}
+        
+    # (A) run bismark two-stage" mapping -------------------------------------
+    # in: .fastqs from trimming: four .fastqs,
+    #     properly paired ($fastq_r2p, $fastq_r1p) and trimming singletons
+    #    ($fastq_r1singletrim, $fastq_r2singletrim)
+    # out: - paired-end alignments out ($bam_pe, $bam_pe_unmap1, $bam_pe_unmap2)
+    #      - single-end .bam alignments out ($bam_single1, $bam_single2)
+    #      - key log files (e.g., mapping rate) 
+    # -------------------------------------------------------------------------
+
+
+        # TAURUS mapping step 1 -----------------------------------------------
+        # (Ai.) first pass, full length reads [2 to 7 minutes each read]
+        bismark $ref_dir_bowtie1 --multicore 3 --bowtie1 --pbat --un -se \
+                $dir_proj/${fastq_r1p[$row]},$dir_proj/${fastq_r1singletrim[$row]}
+        bismark $ref_dir_bowtie1 --multicore 3 --bowtie1 --un -se  \
+                $dir_proj/${fastq_r2p[$row]},$dir_proj/${fastq_r2singletrim[$row]}
+             
+        # aggregate unmapped reads [<1 min]
+        cat *R1*_unmapped_reads.fq.gz > $r1unmap
+        cat *R2*_unmapped_reads.fq.gz > $r2unmap
+
+
+        # umapped read-splitting ---------------------------------------------
+
+        # TAURUS-MH style read-splitting [<1 min per split, usually <1 min tot]
+        # read 1 - first 40bp (requires min length of 80)
+        seqkit seq -m 80 $r1unmap \
+              | seqkit subseq -r 1:40 \
+              | seqkit replace -p "_1:N:0" -r "_1:P1:N:0" > subseq_R1_1.fq
+        # middle (min length needed 30)
+        seqkit seq -m 110 $r1unmap \
+              | seqkit subseq -r 41:-41 \
+              | seqkit replace -p "_1:N:0" -r "_1:P2:N:0" > subseq_R1_2.fq
+        # last 40bp
+        seqkit seq -m 80 $r1unmap \
+              | seqkit subseq -r -40:-1 \
+              | seqkit replace -p "_1:N:0" -r "_1:P3:N:0" > subseq_R1_3.fq
+              
+        # read 2
+        # first 40bp (requires min length of 80)
+        seqkit seq -m 80 $r2unmap \
+              | seqkit subseq -r 1:40 \
+              | seqkit replace -p "_2:N:0" -r "_2:P1:N:0" > subseq_R2_1.fq
+        # middle (min length after trim 30)
+        seqkit seq -m 110 $r2unmap \
+              | seqkit subseq -r 41:-41 \
+              | seqkit replace -p "_2:N:0" -r "_2:P2:N:0" > subseq_R2_2.fq
+        # last 40bp
+        seqkit seq -m 80 $r2unmap \
+              | seqkit subseq -r -40:-1 \
+              | seqkit replace -p "_2:N:0" -r "_2:P3:N:0" > subseq_R2_3.fq
+
+
+        # TAURUS step 2 --------------------------------------------------
+        
+        # single-end, R1, [<2 minutes per read substring]
+        bismark $ref_dir_bowtie1 --multicore 3 --bowtie1 --pbat -se \
+                subseq_R1_1.fq,subseq_R1_2.fq,subseq_R1_3.fq
+                
+        # single-end, R2
+        bismark $ref_dir_bowtie1 --multicore 3 --bowtie1 -se \
+                subseq_R2_1.fq,subseq_R2_2.fq,subseq_R2_3.fq
+
+
+        # merge & dedupe ------------------------------------------------
+
+        # merge & sort all alignments [<3 min]
+        samtools merge -f merged.bam *bismark.bam
+        samtools sort -o merged_sorted.bam merged.bam
+        
+        # deduplication [<1-2 min]
+        picard MarkDuplicates I=merged_sorted.bam  \
+            OPTICAL_DUPLICATE_PIXEL_DISTANCE=2500 \
+            ADD_PG_TAG_TO_READS=false REMOVE_DUPLICATES=true \
+            O=merged_dedupe.bam M=picard.log
+
+        # if fails quickcheck,
+        # remove final file to force re-running this well / skip in subsequent steps
+        samtools quickcheck merged_dedupe.bam \
+            || rm merged_dedupe.bam && echo "quickcheck error with ${wellprefix[$row]}?"
+        
+        samtools index merged_dedupe.bam
+        
+        # optionally cleanup files --------------------------------------
+        # (empty-var check to avoid broad deletion of .bam files)
+        if [[ ! -z "$wellprefix" ]]
+        then
+        echo 'clearing intermediate files for ${wellprefix[$row]}.'
+            rm subseq_*.fq
+            rm *.fq.gz
+            rm ${wellprefix[$row]}*bam
+            rm subseq*bam
+            rm merged.bam
+            rm merged_sorted.bam
+        fi
+    fi
+done
+
+
+
+
+
+echo -e "\n\n'A04a_bismark' completed.\n\n"
+
+
+
+echo "Job $JOB_ID.$SGE_TASK_ID ended on:   " `hostname -s`
+echo "Job $JOB_ID.$SGE_TASK_ID ended on:   " `date `

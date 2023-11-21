@@ -1,0 +1,83 @@
+
+#!/bin/bash
+#$ -cwd
+#$ -o sublogs/A00a_genome_dl_index.$JOB_ID
+#$ -j y
+#$ -N A00a_genome_dl_index
+#$ -l h_rt=8:00:00,h_data=8G
+
+
+
+echo "Job $JOB_ID started on:   " `hostname -s`
+echo "Job $JOB_ID started on:   " `date `
+echo " "
+
+
+
+
+
+# environment init -------------------------------------------------------------
+
+. /u/local/Modules/default/init/modules.sh # <--
+module load anaconda3 # <--
+conda activate snm3Cseq_taurus # <--
+
+export $(cat snm3C_parameters.env | grep -v '^#' | xargs) # <--
+
+
+
+# download/extract ref ---------------------------------------------------------
+
+cd ${ref_dir}
+
+# double check filepaths and hard-coded names here # <--
+# download IGVF consortium-specified .fa & .gtf as example (hard coded below)
+# see https://lh3.github.io/2017/11/13/which-human-reference-genome-to-use
+wget https://ftp.ncbi.nlm.nih.gov/genomes/all/GCA/000/001/405/GCA_000001405.15_GRCh38/seqs_for_alignment_pipelines.ucsc_ids/GCA_000001405.15_GRCh38_no_alt_analysis_set.fna.gz # <--
+wget https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human/release_43/gencode.v43.chr_patch_hapl_scaff.annotation.gtf.gz # <--
+
+# extract compressed files as needed
+# put final, uncompressed names here into "snm3C_parameters.env" (as "ref_fasta" and "ref_gtf")
+for gzfile in *gz
+do
+    gunzip -c ${gzfile} > ${gzfile/.gz/}
+done
+
+# note: if ref_fasta doesn't have .fa or .fasta file format
+# bismark may have issues detecting it in ${ref_dir}
+# rename .fna --> .fa, for example
+for f in *fna; do mv ${f} ${f/fna/fa}; done
+
+
+
+# account for Lambda spike-in --------------------------------------------------
+
+# note on working with Lambda phage or other spike-in (bisulfite conversion efficiency QC)
+# add to reference genome at this step. comment out below four lines--
+# Escherichia phage Lambda, complete genome (GenBank: J02459.1) via NCBI
+
+# wget "https://www.ncbi.nlm.nih.gov/sviewer/viewer.cgi?tool=portal&save=file$=seqview&db=nuccore&report=fasta&id=215104" -O lambda.fa
+# sed -i "1s/.*/>chrL/" lambda.fa
+# cat GCA_000001405.15_GRCh38_no_alt_analysis_set.fa lambda.fa > IGVF_GRCh38_plus_lambda.fa 
+# rm GCA_000001405.15_GRCh38_no_alt_analysis_set.fa
+
+
+
+# index, chrom sizes -----------------------------------------------------------
+
+# extract bp length/chromosome
+samtools faidx ${ref_fasta}
+cut -f 1-2 ${ref_fasta}.fai > chromsizes.tsv
+
+# .fa --> .dict
+picard CreateSequenceDictionary -R ${ref_fasta}
+
+
+
+
+
+echo -e "\n\n'A00a_bwa_index' completed.\n\n"
+
+
+echo "Job $JOB_ID ended on:   " `hostname -s`
+echo "Job $JOB_ID ended on:   " `date `

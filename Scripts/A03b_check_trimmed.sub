@@ -1,0 +1,182 @@
+
+#!/bin/bash
+#$ -cwd
+#$ -o sublogs/A03b_check_trimmed.$JOB_ID
+#$ -j y
+#$ -l h_rt=1:00:00,h_data=4G
+#$ -N A03b_check_trimmed
+#$ -hold_jid A03a_trim
+
+
+
+echo "Job $JOB_ID started on:   " `hostname -s`
+echo "Job $JOB_ID started on:   " `date `
+echo " "
+
+
+
+
+
+# environment init -------------------------------------------------------------
+
+. /u/local/Modules/default/init/modules.sh # <--
+module load anaconda3 # <--
+conda activate snm3Cseq_taurus # <--
+
+export $(cat snm3C_parameters.env | grep -v '^#' | xargs) # <--
+
+overwrite_existing=false # <-- for help with incomplete jobs
+
+
+
+# extract target filepaths -----------------------------------------------------
+
+query_metadat () {
+  awk -F',' -v targetcol="$1" \
+  'NR==1 {
+                for (i=1;i<=NF;i++) {
+                    if ($i==targetcol) {assayout=i; break} }
+                print $assayout
+              } 
+      NR>1 {
+                print $assayout
+            }' $metadat_well
+}
+
+check_filepaths_in_assay() {
+    for file in $@
+    do 
+        if [[ ! -s $file ]]
+        then
+            echo "missing '$file'"
+        fi
+    done
+}
+
+check_filepath_by_batch() {
+target_array=($@)
+batches_to_rerun=()
+for ((target_batch=1; target_batch<=nbatches; target_batch++))
+    do
+        target_well_rows=()
+        for ((row=1; row<=nwells; row++))
+        do
+            if [[ "${batchnum[$row]}" == "${target_batch}" ]]
+            then
+                target_well_rows+=($row)
+            fi
+        done
+
+        batch_file_list=${target_array[@]: ${target_well_rows[0]}:${#target_well_rows[@]} }
+    
+        num_files_missing=$(check_filepaths_in_assay ${batch_file_list[@]} | wc -l)
+
+        if [[ ${num_files_missing} > 0 ]]
+        then
+            batches_to_rerun+=(${target_batch})
+            echo -e "${target_batch} \t ${num_files_missing}"
+        fi
+    done 
+    
+    if [[ ${#batches_to_rerun[@]} > 0 ]]
+    then
+        echo "batches to re-run:"
+        echo "${batches_to_rerun[*]}"        
+    fi
+}
+
+
+batchnum=($(query_metadat "batchnum"))
+
+nwells=${#batchnum[@]}
+nbatches=${batchnum[-1]}
+
+
+
+# apply checks for A03a output -------------------------------------------------
+# (may be later depreciated due to explicit target filename change)
+
+echo "-----------------------------------------------------------------"
+echo "A. checking each expected file (from ${metadat_well}, by batch...)"
+echo "-----------------------------------------------------------------\n\n"
+
+echo "* checks the A03a output columns of 'metadat_well' if the file exists and is non-empty."
+echo "* if none missing, will only output column names below."
+echo "* caveat: if some fastq.gz files seem 'missing' but all other checks OK, may just be no/few reads surviving trimming."
+echo "  (check 'fastq_demultip/' and associated fastp logs e.g., fastq_trimmed/wellprefix.html report)"
+
+r1paired=($(query_metadat "A03a_fqgz_paired_R1"))
+r2paired=($(query_metadat "A03a_fqgz_paired_R2"))
+r1singletrim=($(query_metadat "A03a_fqgz_singletrim_R1"))
+r2singletrim=($(query_metadat "A03a_fqgz_singletrim_R2"))
+jsonout=($(query_metadat "A03a_json_fastp"))
+
+echo -e "\nchecking Read 1 properly paired .fastq.gz files:\n"
+echo -e "batchnum\tnum_missing"
+check_filepath_by_batch ${r1paired[@]}
+
+echo -e "\nchecking Read 2 properly paired .fastq.gz files:\n"
+echo -e "batchnum\tnum_missing"
+check_filepath_by_batch ${r2paired[@]}
+
+echo -e "\nchecking Read 1 trimming singleton .fastq.gz files:\n"
+echo -e "batchnum\tnum_missing"
+check_filepath_by_batch ${r1singletrim[@]}
+
+echo -e "\nchecking Read 2 trimming singleton .fastq.gz files:\n"
+echo -e "batchnum\tnum_missing"
+check_filepath_by_batch ${r2singletrim[@]}
+
+echo -e "\nchecking .json summary file out:\n"
+echo -e "batchnum\tnum_missing"
+check_filepath_by_batch ${jsonout[@]}
+
+echo -e "\n\nsuggest re-running and checking sublog output of above batches."
+
+
+
+echo -e "\n\n-----------------------------------------------------------------"
+echo "B. checking each expected file (from $metadat_well)"
+echo -e "-----------------------------------------------------------------\n\n"
+
+echo "* checks the A03a output columns of 'metadat_well' if the file exists and is non-empty."
+echo "* if none missing, will only output target column names below."
+echo "* if some declared 'missing' but all other checks OK, may just be no/few reads surviving trimming."
+echo "  (check 'fastq_demultip/' and associated fastp logs e.g., fastq_trimmed/wellprefix.html report)"
+
+echo -e "\nchecking Read 1 properly paired .fastq.gz files:\n"
+check_filepaths_in_assay ${r1paired[@]}
+
+echo -e "\nchecking Read 2 properly paired .fastq.gz files:\n"
+check_filepaths_in_assay ${r2paired[@]}
+
+echo -e "\nchecking Read 1 singletrimed .fastq.gz files:\n"
+check_filepaths_in_assay ${r1singletrim[@]}
+
+echo -e "\nchecking Read 2 singletrim .fastq.gz files:\n"
+check_filepaths_in_assay ${r2singletrim[@]}
+
+echo -e "\nchecking .json summary file out:\n"
+check_filepaths_in_assay ${jsonout[@]}
+
+
+
+echo -e "\n\n-----------------------------------------------------------------"
+echo "C. checking log files for issues."
+echo -e "-----------------------------------------------------------------\n\n"
+
+echo "checking if 'completed' in sublogs/A03a_trim* output."
+echo "if any filename is printed, the associated batch may have not completed trimming."
+
+grep -c 'ended on' sublogs/A03a_trim* | awk -F ":" '$2==0 {print $1}'
+
+
+
+
+
+echo -e "\n\n'A03b_check_trimmed' completed.\n\n"
+
+
+
+echo "Job $JOB_ID ended on:   " `hostname -s`
+echo "Job $JOB_ID ended on:   " `date `
