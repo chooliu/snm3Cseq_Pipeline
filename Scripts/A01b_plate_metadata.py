@@ -35,7 +35,7 @@ print( filepaths_raw_fastq[0:4] )
 # split before lane (L00[1-8]) to get unique plate names
 plates_df = pd.DataFrame(
     {'plate' : pd.unique([filepath.split("/")[-1].split("_L")[0] for filepath in filepaths_raw_fastq])}
-    ).sort_values('plate').reindex()
+    ).sort_values('plate').reset_index(drop = True)
 
 # study specific metadata: edit these! # <--
 # example presented here is for IGVF cell lines (e.g., 20231005-3C29D1-Pos1-C04_S25)

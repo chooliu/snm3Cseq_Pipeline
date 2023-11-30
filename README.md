@@ -17,29 +17,38 @@
 * Cell-level QC steps, which can be celltype- and study-specific. (Some suggestions on the [Detailed Overview](./Documentation/detailed_overview.md) page and within [past manuscripts](#technology-references).)
 * Downstream analysis of mC and 3C following basic quantification (e.g., feature selection/calling, clustering, hypothesis testing, imputation).
 
+**Quick Start**
+* Clone (`git clone`) or download this repo as a .zip file [from the releases page](https://github.com/chooliu/snm3Cseq_Pipeline/releases).
+* install dependencies in .yaml: `conda env create -f Documentation/snm3Cseq_taurus.yml`
+* customize the genome alignment and input sample metadata (either using Jupyter notebooks `A00*` and `A01*` *OR* by editing Scripts `A00*` and `A01*`)
+* run submission scripts (`.sub`) in order, paying attention to parallelization task IDs `-t 1-Nplates` and `-t 1-Nbatches` (24 wells/batch by default)
+* read the [Detailed Overview](./Documentation/detailed_overview.md) for FAQs and common pitfalls.
+
+---
+
+## Links
+
 ### Related Pipelines 
 
-Existing quantification pipelines, mainly from our collaborators at/formerly at the Salk Institute:
+* Existing quantification pipelines, mainly from our collaborators at/formerly at the Salk Institute:
+  - [TAURUS-MH](https://github.com/dixonlab/Taurus-MH): read-splitting based mapping pipeline historically used on sn-m3C-seq &rarr; developed specifically for this assay primarily by Dr. Dongsung Lee.
+  - [YAP (Yet Another Pipeline)](https://hq-1.gitbook.io/mc/): supports sn-m3C-seq and additional related assays (e.g., mC, mCT, mCAT-seq), including new protocol based on restriction-site splitting for m3C. Snakemake. Developed primarily by the Ecker Lab/Drs. Hanqing Liu & Jingtian Zhou.
 
-* [TAURUS-MH](https://github.com/dixonlab/Taurus-MH): read-splitting based mapping pipeline historically used on sn-m3C-seq &rarr; developed specifically for this assay primarily by Dr. Dongsung Lee.
-* [YAP (Yet Another Pipeline)](https://hq-1.gitbook.io/mc/): supports sn-m3C-seq and additional related assays (e.g., mC, mCT, mCAT-seq), including new protocol based on restriction-site splitting for m3C. Snakemake. Developed primarily by the Ecker Lab/Drs. Hanqing Liu & Jingtian Zhou.
-
-Downstream analysis tools:
-
-* [allcools](https://lhqing.github.io/ALLCools): Typically used by our group for mC downstream analysis. Helpful to review for .allc and .mcds descriptions. 
-* [scHiCluster](https://github.com/zhoujt1994/scHiCluster): Contact pairs to binned contact count matrices at various resolution, including imputation. Our groups have also worked with the Ma Lab's [Higashi](https://github.com/ma-compbio/Higashi/) & [FastHigashi](https://github.com/ma-compbio/Fast-Higashi).
+* Downstream analysis tools:
+  - [allcools](https://lhqing.github.io/ALLCools): Typically used by our group for mC downstream analysis. Helpful to review for .allc and .mcds descriptions.
+  - [scHiCluster](https://github.com/zhoujt1994/scHiCluster): Contact pairs to binned contact count matrices at various resolution, including imputation. Our groups have also worked with the Ma Lab's [Higashi](https://github.com/ma-compbio/Higashi/) & [FastHigashi](https://github.com/ma-compbio/Fast-Higashi).
 
 ### Technology References
 
-Flagship assay paper and closely related methylome-only reaction (although we are now on snmC-seq3):
-* [sn-m3C-seq](https://pubmed.ncbi.nlm.nih.gov/31501549/): Lee DS, et al. Simultaneous profiling of 3D genome structure and DNA methylation in single human cells. Nature methods. 2019 Oct;16(10):999-1006.
-* [snmC-seq2](https://pubmed.ncbi.nlm.nih.gov/30237449/): Luo, C. et al. Robust single-cell DNA methylome profiling with snmC-seq2. Nat. Commun. 9, 7–12 (2018).
+* Flagship assay paper and closely related methylome-only reaction:
+  - [sn-m3C-seq](https://pubmed.ncbi.nlm.nih.gov/31501549/): Lee DS, et al. Simultaneous profiling of 3D genome structure and DNA methylation in single human cells. Nature methods. 2019 Oct;16(10):999-1006.
+  - [snmC-seq2](https://pubmed.ncbi.nlm.nih.gov/30237449/): Luo, C. et al. Robust single-cell DNA methylome profiling with snmC-seq2. Nat. Commun. 9, 7–12 (2018). [Note: we are now on [snmC-seq3](https://www.protocols.io/view/snm3c-seq3-cwxuxfnw.html) but only a wet lab protocol citation exists.]
 
-Our library structure is described in the [Detailed Overview](./Documentation/detailed_overview.md) and a [seqspec](https://igvf.github.io/seqspec/specs/sn-m3C-seq/spec.html). 
+* Our library structure is described in the [Detailed Overview](./Documentation/detailed_overview.md) and a [seqspec](https://igvf.github.io/seqspec/specs/sn-m3C-seq/spec.html). 
 
-Additional examples of applications/publications using sn-m3C-seq:
-* [Liu, et al. (2023) preprint](https://www.biorxiv.org/content/10.1101/2023.04.16.536509v1): Liu H, et al. Single-cell DNA Methylome and 3D Multi-omic Atlas of the Adult Mouse Brain. bioRxiv. 2023 Apr 18.
-* [Heffel, et al. (2022) preprint](https://www.biorxiv.org/content/10.1101/2022.10.07.511350v1): Heffel MG, et al. Epigenomic and chromosomal architectural reconfiguration in developing human frontal cortex and hippocampus. bioRxiv. 2022:2022-10.
+* Additional examples of applications/publications using sn-m3C-seq:
+  - [Liu, et al. (2023) preprint](https://www.biorxiv.org/content/10.1101/2023.04.16.536509v1): Liu H, et al. Single-cell DNA Methylome and 3D Multi-omic Atlas of the Adult Mouse Brain. bioRxiv. 2023 Apr 18.
+  - [Heffel, et al. (2022) preprint](https://www.biorxiv.org/content/10.1101/2022.10.07.511350v1): Heffel MG, et al. Epigenomic and chromosomal architectural reconfiguration in developing human frontal cortex and hippocampus. bioRxiv. 2022:2022-10.
 
 ### Example Datasets
 

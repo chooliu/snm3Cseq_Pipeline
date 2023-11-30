@@ -1,11 +1,11 @@
 
-# #!/bin/bash
-# #$ -cwd
-# #$ -o sublogs/A04b_check_bismark.$JOB_ID
-# #$ -j y
-# #$ -l h_rt=2:00:00,h_data=4G
-# #$ -N A04b_bischeck
-# #$ -hold_jid A04a_bismark
+#!/bin/bash
+#$ -cwd
+#$ -o sublogs/A04b_check_bismark.$JOB_ID
+#$ -j y
+#$ -l h_rt=2:00:00,h_data=4G
+#$ -N A04b_bischeck
+#$ -hold_jid A04a_bismark
 
 
 
