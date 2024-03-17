@@ -1,0 +1,51 @@
+# if you have not run this pipeline before, i strongly suggest going step-by-step
+# through the Notebooks/*.ipynb and reading Documentation/detailed_overview.md.
+
+# for more experienced users,
+# you can: - edit "snmCT_parameters.env"
+#          - find and replace "Nplates" and "Nbatches" below
+#            with the experiment's actual numeric values, where by default, Nbatches = 16*Nplates
+#            (by specifying -t externally, it overwrites the respective 32 and 512 values hard-coded in the .sub files)
+#          - run all the resulting .qsub commands, assuming using Hoffman2/SGE schedulers
+#            (recommend submitting all of A00* at a time, A01* at a time, ...,
+#             although could qsub all as file dependency structure is embedded in scripts)
+#          - also, may be helpful to run certain steps (‡) interactively for troubleshooting 
+#            
+
+# * = job array based on "platenum"
+# † = job array based on "batchnum" (two rows at a time)
+# ‡ fast enough to run interactively
+
+
+
+qsub               Scripts/A00a_genome_dl_index.sub  # ‡
+qsub               Scripts/A00b_genome_prep_bismark.sub
+qsub               Scripts/A00c_annotations_bed.sub # ‡
+
+qsub -t 1-Nplates  Scripts/A01a_merge_lanes.sub # *
+qsub               Scripts/A01b_plate_metadata.sub # ‡
+
+
+qsub -t 1-Nplates  Scripts/A02a_demultiplex_fastq.sub # *
+qsub               Scripts/A02b_check_demultip.sub # ‡
+qsub               Scripts/A02c_fastqc_demultip_fastq.sub
+
+qsub -t 1-Nbatches Scripts/A03a_trimming_fastp.sub # †
+qsub               Scripts/A03b_check_trimmed.sub # ‡
+qsub               Scripts/A03c_fastqc_trimmed.sub
+
+qsub -t 1-Nbatches Scripts/A04a_bismark_map_TAURUS.sub # †
+qsub               Scripts/A04b_check_bismark.sub # ‡
+qsub -t 1-Nbatches Scripts/A04c_coverage.sub  # †
+
+qsub -t 1-Nbatches Scripts/A05a_bam2allc.sub # †
+qsub               Scripts/A05b_check_allcs.sub # ‡
+qsub -t 1-Nbatches Scripts/A05c_global_mC_stats.sub  # †
+qsub -t 1-Nplates  Scripts/A05d_allc_to_mcds.sub   # *
+
+qsub -t 1-Nbatches Scripts/A06a_quant_contacts.sub # †
+qsub               Scripts/A06b_check_contacts.sub # ‡
+
+qsub               Scripts/A07a_parse_metadata.sub # ‡
+qsub               Scripts/A07b_compile_metadata.sub # ‡
+

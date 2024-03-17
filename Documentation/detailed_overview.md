@@ -59,9 +59,11 @@ Each section has a code block showing typical `qsub` commands. These can be run 
 
 ```
 # check desired ref genome, paths, & snm3C_parameters.env before running
-qsub Scripts/A00a_genome_dl_index.sub  
-qsub Scripts/A00b_genome_prep_bismark.sub
-qsub Scripts/A00c_annotations_bed.sub
+qsub               Scripts/A00a_genome_dl_index.sub  # ‡
+qsub               Scripts/A00b_genome_prep_bismark.sub
+qsub               Scripts/A00c_annotations_bed.sub # ‡
+
+# ‡ fast enough to run interactively
 ```
 
 **Always submit from within the project directory.** (Or if `qsub -cwd` flag not supported, edit to use absolute filepath for `.env` file, followed by `cd $dir_proj`)
@@ -72,8 +74,11 @@ qsub Scripts/A00c_annotations_bed.sub
 ### A01 Commands to Run ⭐
 
 ```
-qsub Scripts/A01a_merge_lanes.sub # * -t 1-Nplates
-qsub Scripts/A01b_plate_metadata.sub
+qsub -t 1-Nplates  Scripts/A01a_merge_lanes.sub # *
+qsub               Scripts/A01b_plate_metadata.sub # ‡
+
+# * = job array based on "platenum"
+# ‡ fast enough to run interactively
 ```
 
 * Our raw data is demultiplexed at the plate-level (i5/i7 index reads) and base-called via Basespace/`bcl2fastq`. The resulting nomenclature is effectively `Plate_L00*_R1.fq.gz` (Read 1) and `Plate_L00*_R2.fq.gz` (Read 2). The "Plate" name usually contains study-specific metadata separated by dashes that are useful to retain.
@@ -139,9 +144,12 @@ Finally, `Metadata/A01c_well_filepaths.csv` has one row for well, where `Nplates
 ### A02 Commands to Run ⭐
 
 ```
-qsub Scripts/A02a_demultiplex_fastq.sub # * -t 1-Nplates
-qsub Scripts/A02b_check_demultip.sub #
-qsub Scripts/A02c_fastqc_demultip_fastq.sub
+qsub -t 1-Nplates  Scripts/A02a_demultiplex_fastq.sub # *
+qsub               Scripts/A02b_check_demultip.sub # ‡
+qsub               Scripts/A02c_fastqc_demultip_fastq.sub
+
+# * = job array based on "platenum"
+# ‡ fast enough to run interactively
 ```
 
 * Each Read 1 begins with a 8bp "cell barcode" specific to one of the 384 wells in the plate, and by extension one nucleus/well (barring relatively rare doublets or empty wells from flow cytometry sorting; likely <3%).
@@ -165,9 +173,12 @@ qsub Scripts/A02c_fastqc_demultip_fastq.sub
 
 ### A03 Commands to Run ⭐
 ```
-qsub Scripts/A03a_trimming_fastp.sub # † -t 1-Nbatchnum
-qsub Scripts/A03b_check_trimmed.sub
-qsub Scripts/A03c_fastqc_trimmed.sub
+qsub -t 1-Nbatches Scripts/A03a_trimming_fastp.sub # †
+qsub               Scripts/A03b_check_trimmed.sub # ‡
+qsub               Scripts/A03c_fastqc_trimmed.sub
+
+# † = job array based on "batchnum" (two rows at a time)
+# ‡ fast enough to run interactively
 ```
 
 * Now that the sequences are demultiplexed, we remove the cell barcode, random hexamer priming sequence, artifactual adaptase tail in our expected library structure (figure above). In addition, we want to trim adapter/the random 9H primer sequences (due to mean insert sizes ~250-300, potentially present in both 5'/3' ends), low complexity sequences (polyN), and Q-score < 20 regions.
@@ -198,15 +209,19 @@ done
 
 ### A04 Commands to Run ⭐
 ```
-qsub Scripts/A04a_bismark_map_TAURUS.sub # † -t 1-Nbatchnum
-qsub Scripts/A04b_check_bismark.sub 
-qsub Scripts/A04c_coverage.sub # † -t 1-Nbatchnum
+qsub -t 1-Nbatches Scripts/A04a_bismark_map_TAURUS.sub # †
+qsub               Scripts/A04b_check_bismark.sub # ‡
+qsub -t 1-Nbatches Scripts/A04c_coverage.sub  # †
+
+# † = job array based on "batchnum" (two rows at a time)
+# ‡ fast enough to run interactively
 ```
 
 * **A04a:** Maps the trimmed .fastqs via a slightly modified version of the **"TAURUS-MH"** mapping procedure originally proposed in the original [sn-m3C-seq](https://pubmed.ncbi.nlm.nih.gov/31501549/) manuscript (Lee, et al. [2019]). 
     - We first attempt to align the reads in single-end mapping mode via `bismark` and `bowtie1` (end-to-end alignment) in  `mapping_bismark/wellprefix/`.
     - A read may not align to genome due to the presence of a 3C ligation junction. We thus split each unmapped read into up to three non-overlapping parts (e.g., unmapped R1 &rarr; R1_1, R1_2, R1_3 via `seqkit`) and attempt to re-align these subreads.
     - All alignments are concatenated, sorted, and checked for PCR/optical duplicates (`picard MarkDuplicates`).
+    - The primary updates from the original code are that: extremely short, unmapped reads are 
 * **A04b.** Checks final merged, de-duplicated `.bam` present.
 * **A04c.** Calculates some basic statistics (e.g.,  `samtools stats`: number of alignments post-filtering) and coverage levels on this `.bam` ( `samtools mpileup`: for coverage per cell, chrX/chrY ratio for sex prediction)
 
@@ -222,10 +237,14 @@ qsub Scripts/A04c_coverage.sub # † -t 1-Nbatchnum
 
 ### A05 Commands to Run ⭐
 ```
-# qsub Scripts/A05a_bam2allc.sub  # † -t 1-Nbatchnum 
-# qsub Scripts/A05b_check_allcs.sub
-# qsub Scripts/A05c_global_mC_stats.sub # † -t 1-Nbatchnum
-# qsub Scripts/A05d_allc_to_mcds.sub # * -t 1-Nplatenum
+qsub -t 1-Nbatches Scripts/A05a_bam2allc.sub # †
+qsub               Scripts/A05b_check_allcs.sub # ‡
+qsub -t 1-Nbatches Scripts/A05c_global_mC_stats.sub  # †
+qsub -t 1-Nplates  Scripts/A05d_allc_to_mcds.sub   # *
+
+# * = job array based on "platenum"
+# † = job array based on "batchnum" (two rows at a time)
+# ‡ fast enough to run interactively
 ```
 
 * **A05a:** We use  `allcools` to quantify methylation levels and save them into the tab-separated `.allc` format. See [allcools documentation](https://lhqing.github.io/ALLCools/start/input_files.html) for more details. Example file:
@@ -255,15 +274,18 @@ Interpretation: On the positive strand at chr1:3785376, there is a cytosine foll
 
 ### A06 Commands to Run ⭐
 ```
-# qsub Scripts/A06a_quant_contacts.sub # † -t 1-Nbatchnum
-# qsub Scripts/A06b_check_contacts.sub
+qsub -t 1-Nbatches Scripts/A06a_quant_contacts.sub # †
+qsub               Scripts/A06b_check_contacts.sub # ‡
+
+# † = job array based on "batchnum" (two rows at a time)
+# ‡ fast enough to run interactively
 ```
 
 * **A06a:** This is my recoding of TAURUS-MH's contact quantification scheme, which trades off some efficiency (as it keeps the alignments in memory) for some readability and modularity (`bamread` is used to generate a tidy pandas DataFrame) but is otherwise the same.
     - In brief, the alignments are grouped by readname and annotated by its split type (saved in read and alignment name in step A04a). An alignment could be from eight possible split types: either full-length R1, the 5' start of R1 ("R1:P1"), the middle ("R1:P2"), or 3' end of R1 ("R1:P3"), R2:P3, R2:P2, R2:P1, or R2.
     - For a given readname, the "outermost" (most 5') positions are taken as putative contact positions, with at most one contact pair per readname.
     - Contacts are filtered for duplicates. They can also optionally be filtered to exclude certain chromosomes or contacts under some minimum distance (to exclude potential re-ligations). 
-    - The output for each well should be a `pairs.tsv` and `metadat_pairs.tsv` tabulating features like the total number of putative intra- versus inter-chromosomal 3C contacts. 
+    - The output for each well should be a `pairs.tsv.gz` and `metadat_pairs.tsv` tabulating features like the total number of putative intra- versus inter-chromosomal 3C contacts. 
 * **A06b.** Checks if these two files are present.
 
 ### A06 Troubleshooting Notes  
@@ -279,8 +301,10 @@ Interpretation: On the positive strand at chr1:3785376, there is a cytosine foll
 
 ### A07 Commands to Run ⭐
 ```
-# qsub Scripts/A07a_parse_metadata.sub
-# qsub Scripts/A07b_compile_metadata.sub 
+qsub               Scripts/A07a_parse_metadata.sub # ‡
+qsub               Scripts/A07b_compile_metadata.sub # ‡
+
+# ‡ fast enough to run interactively
 ```
 
 * These helper scripts just collect the metadata already generated in previous steps into well-level metadata tables for QC (stored in the `Metadata/` folder). Each row is equal to one `wellprefix`.
@@ -295,7 +319,7 @@ With the caveat that nucleus exclusion criteria can be very context-, celltype-,
 * `Alignments_Total_SplitAdj` (>500,000 reads) and `contacts_final` (# of 3C contacts, >100,000). May consider having a maximum value cap for these as well (extremely high values may be doublets or contamination)
 
 Keep an eye on these, no definitive threshold:
-* `CoveragePerc1x` (what frac of the genome is covered by at least one read)
+* `CoveragePerc1x` (what frac of the genome is covered by at least one read; consider excluding very low and very high)
 * `CoverageXdivY` (if mix of male and female samples, often 10-fold higher values of this ratio for female samples)
 * `ratio_finalcont_intragreater1kb_inter` (putative true bondafide 3C-contacts  / noise from btwn-chrom ligations)
 * `picard_perc_dupe`  (read duplication rate)

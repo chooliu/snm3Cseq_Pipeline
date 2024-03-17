@@ -1,5 +1,5 @@
 
-# A06a_quantify_contacts_TAURUS.py, v0.1 =======================================
+# A06a_quantify_contacts_TAURUS.py, v0.2 =======================================
 # this is a re-code of TAURUS-MH by @chooliu 
 # trades off some readability/modularity versus efficiency (reads in memory)
 # ==============================================================================
@@ -97,19 +97,17 @@ contacts_taurus = contacts_taurus.drop('ReadPrefix', axis = 1)
 
 # TAURUS-like --> contacts file ================================================
 
-# initialize
+# alignments (pairs in every other row) --> wide (pairs same row)
 pairs_taurus = \
-    pd.DataFrame(index = range(int((contacts_taurus.shape[0] + 1)/2)),
-                 columns = range(6))
-pairs_taurus.columns = ['chr1', 'pos1', 'chr2', 'pos2', 'strand1', 'strand2']
+    pd.concat(
+        [contacts_taurus[['Chromosome', 'Pos', 'Strand']
+            ].iloc[0::2].reset_index(drop = True),
+        contacts_taurus[['Chromosome', 'Pos', 'Strand']
+            ].iloc[1::2].reset_index(drop = True)],
+        axis = 1, ignore_index = True)
+pairs_taurus.columns = ['chr1', 'pos1', 'strand1', 'chr2', 'pos2', 'strand2']
 
-# alignments --> pairs
-pairs_taurus.iloc[:, [0, 1]] = \
-    contacts_taurus[['Chromosome', 'Pos']].iloc[0::2, ].reset_index(drop = True)
-pairs_taurus.iloc[:, [2, 3]] = \
-    contacts_taurus[['Chromosome', 'Pos']].iloc[1::2, ].reset_index(drop = True)
-pairs_taurus.iloc[:, 4] = contacts_taurus['Strand'].iloc[0::2, ]
-pairs_taurus.iloc[:, 5] = contacts_taurus['Strand'].iloc[1::2, ]
+pairs_taurus = pairs_taurus[['chr1', 'pos1', 'chr2', 'pos2', 'strand1', 'strand2']]
 
 # for intra distances, calculate distance
 pair_is_intra = pairs_taurus['chr1'] == pairs_taurus['chr2']
@@ -138,11 +136,12 @@ filt_chrom = pairs_taurus['chr1'].isin(list_valid_chrom) & \
 filter_final = (~ pair_is_intra | filt_intra_dist ) & filt_chrom & filt_nondupe
 final_out = pairs_taurus[filter_final]
 
-final_out = final_out.assign(chr1=tidy_chr_order(final_out.loc[:, 'chr1'])
-                            ).assign(chr2=tidy_chr_order(final_out.loc[:, 'chr2']))
+final_out = final_out.assign(chr1 = tidy_chr_order(final_out.loc[:, 'chr1'])
+                            ).assign(chr2 = tidy_chr_order(final_out.loc[:, 'chr2']))
 final_out = final_out.sort_values(['chr1', 'chr2', 'pos1', 'pos2'])
 
-final_out.to_csv("pairs.tsv", sep = "\t", index_label=False, index = False, header=False)
+final_out.to_csv("pairs.tsv.gz", sep = "\t",
+    index_label = False, index = False, header = False, compression = 'gzip')
 
 
 

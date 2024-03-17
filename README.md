@@ -21,7 +21,7 @@
 * Clone (`git clone`) or download this repo as a .zip file [from the releases page](https://github.com/chooliu/snm3Cseq_Pipeline/releases).
 * install dependencies in .yaml: `conda env create -f Documentation/snm3Cseq_taurus.yml`
 * customize the genome alignment and input sample metadata (either using Jupyter notebooks `A00*` and `A01*` *OR* by editing Scripts `A00*` and `A01*`)
-* run submission scripts (`.sub`) in order, paying attention to parallelization task IDs `-t 1-Nplates` and `-t 1-Nbatches` (24 wells/batch by default)
+* run submission scripts (`.sub`) in order, paying attention to parallelization task IDs `-t 1-Nplates` and `-t 1-Nbatches` (24 wells/batch by default). For convenience, this can be done via the [Notebooks](./Notebooks), or the full list of submission commands is listed at [Documentation/submission_helper.txt](./Documentation/submission_helper.txt).
 * read the [Detailed Overview](./Documentation/detailed_overview.md) for FAQs and common pitfalls.
 
 ---

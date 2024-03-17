@@ -113,23 +113,27 @@ fi
 
 # .allc files --> aggregated into mcds regions
 # note: the mcds is not a single file, but more like a directory with binary compression
-# if this step fails may leave a tmp file in the mcds/ folder
 allcools generate-dataset  \
     --allc_table ${tsv_target_allcs} \
     --output_path mcds/${SGE_TASK_ID}.mcds \
     --chrom_size_path ${ref_chromsizes} \
     --obs_dim cell \
     --cpu 8 \
-    --chunk_size 400 \
+    --chunk_size 2000 \
     --regions chrom100k 100000 \
+    --regions chrom5k 5000 \
     --regions genebody ${ref_genebody} \
     --quantifiers chrom100k count CGN,CHN \
+    --quantifiers chrom5k hypo-score CGN cutoff=0.9 \
     --quantifiers genebody count CGN,CHN
 
 # not standard, but but consider adding:
+# * 5kb sliding windows (see mcad / 5kb tutorial for allcools)
 #    --regions chrom5k 5000 \
+#    --quantifiers chrom5k hypo-score CHN,CGN cutoff=0.9 \
+# * genebody +/- 2kb (historically, include promoter region + increase cov)
 #    --regions geneslop2k $ref_geneslop2k \
-# (genebody +/- 2kb to include promoter region + increase cov)  
+#    --quantifiers geneslop2k count CGN,CHN \
 
 
 
